@@ -15,7 +15,7 @@ from utils import compute_mae, compute_fmeasure, compute_smeasure, compute_emeas
 #9 数据集：DUTS-TR训练；DUTS-TE、ECSSD、HKU-IS、PASCAL-S测试
 #9 评估指标：MAE、F-measure、S-measure、E-measure
 #9 核心模块：空间自适应门控融合CNN局部与Transformer全局；全局双维度门控增强高层定位；多分辨率边缘监督细化边界
-#asvbyu
+#asvbyusasadad
 
 def parse_args():
     parser = argparse.ArgumentParser(description='SOD Testing')
