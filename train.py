@@ -10,7 +10,6 @@ import torch.nn as nn
 #9 数据增强：随机翻转/旋转/缩放裁剪/颜色抖动，CutMix (p=0.3)
 #9 多尺度输入：训练尺度随机取256~384
 #9 训练配置：Batch size 16，80轮，早停（验证MAE 15轮不降即停）
-#2
 
 # 抑制 PyTorch SequentialLR 的 epoch 参数警告
 warnings.filterwarnings('ignore', message='.*epoch parameter.*scheduler.step().*')
