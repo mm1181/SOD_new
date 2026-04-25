@@ -1,0 +1,252 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>消防器材检测 - SOD+YOLO联合模式</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 10px; font-size: 2em; }
+        .subtitle { text-align: center; color: #888; margin-bottom: 20px; }
+        .mode-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            margin-left: 10px;
+        }
+        .mode-selector {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .mode-btn {
+            padding: 10px 25px;
+            border: 2px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .mode-btn:hover { border-color: #667eea; background: rgba(102, 126, 234, 0.2); }
+        .mode-btn.active {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .upload-area {
+            background: rgba(255,255,255,0.05);
+            border: 2px dashed rgba(255,255,255,0.2);
+            border-radius: 16px;
+            padding: 50px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 25px;
+        }
+        .upload-area:hover { border-color: #667eea; background: rgba(102, 126, 234, 0.1); }
+        .upload-icon { font-size: 48px; margin-bottom: 15px; }
+        #fileInput { display: none; }
+        .results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .result-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 15px;
+        }
+        .result-card h3 { margin-bottom: 12px; color: #667eea; font-size: 1em; }
+        .result-card img { width: 100%; border-radius: 8px; }
+        .alarm-box {
+            background: rgba(231, 76, 60, 0.2);
+            border: 1px solid #e74c3c;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        .alarm-box.safe { background: rgba(46, 204, 113, 0.2); border-color: #2ecc71; }
+        .loading { text-align: center; padding: 40px; display: none; }
+        .loading.show { display: block; }
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.1);
+            border-top-color: #667eea;
+            border-radius: 50%;
+            width: 40px; height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .info-box {
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .info-box h4 { color: #667eea; margin-bottom: 8px; }
+        .info-box p { color: #aaa; font-size: 0.9em; line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔥 消防器材检测 <span class="mode-badge">SOD+YOLO联合</span></h1>
+        <p class="subtitle">结合显著性目标检测与YOLO目标检测，精准识别动火区域和消防器材</p>
+        
+        <div class="info-box">
+            <h4>💡 模式说明</h4>
+            <p>
+                <strong>联合模式</strong>：SOD 检测动火区域（火花/焊接点），YOLO 检测消防器材，两者结合判断违规<br>
+                <strong>仅SOD</strong>：显著性目标检测，用于定位动火区域<br>
+                <strong>仅YOLO</strong>：目标检测，同时检测消防器材和动火点
+            </p>
+        </div>
+        
+        <div class="mode-selector">
+            <button class="mode-btn active" data-mode="combined">🔗 联合模式</button>
+            <button class="mode-btn" data-mode="sod">🎯 仅SOD</button>
+            <button class="mode-btn" data-mode="yolo">📦 仅YOLO</button>
+        </div>
+        
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📷</div>
+            <p>点击或拖拽图片到此处上传</p>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>正在检测中...</p>
+        </div>
+        
+        <div class="results" id="results" style="display: none;"></div>
+    </div>
+    
+    <script>
+        let currentMode = 'combined';
+        const modeEndpoints = {
+            'combined': '/detect',
+            'sod': '/detect_sod_only',
+            'yolo': '/detect_yolo_only'
+        };
+        
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentMode = btn.dataset.mode;
+            });
+        });
+        
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', e => { e.preventDefault(); });
+        uploadArea.addEventListener('drop', e => {
+            e.preventDefault();
+            if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', e => {
+            if (e.target.files.length > 0) handleFile(e.target.files[0]);
+        });
+        
+        async function handleFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('results').style.display = 'none';
+            
+            try {
+                const response = await fetch(modeEndpoints[currentMode], {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.error) { alert('检测失败: ' + data.error); return; }
+                displayResults(data);
+            } catch (error) {
+                alert('请求失败: ' + error.message);
+            } finally {
+                document.getElementById('loading').classList.remove('show');
+            }
+        }
+        
+        function displayResults(data) {
+            const results = document.getElementById('results');
+            results.style.display = 'grid';
+            results.innerHTML = '';
+            
+            // 原图
+            if (data.original) {
+                results.innerHTML += `
+                    <div class="result-card">
+                        <h3>📸 原始图片</h3>
+                        <img src="/static/${data.original}" alt="原图">
+                    </div>
+                `;
+            }
+            
+            // SOD 结果
+            if (data.sod_image) {
+                results.innerHTML += `
+                    <div class="result-card">
+                        <h3>🎯 SOD 显著性图</h3>
+                        <img src="/static/${data.sod_image}" alt="SOD">
+                    </div>
+                `;
+            }
+            
+            // 检测结果
+            if (data.result_image) {
+                let alarmHtml = '';
+                if (data.is_alarm !== undefined) {
+                    const alarmClass = data.is_alarm ? '' : 'safe';
+                    const title = data.is_alarm ? 
+                        '⚠️ ' + (data.alarm_details?.boxes?.[0]?.type || '检测到违规') :
+                        '✅ 检测通过';
+                    const msg = data.is_alarm ?
+                        (data.alarm_details?.boxes?.[0]?.msg || '请检查消防器材') :
+                        '消防器材配备符合要求';
+                    alarmHtml = `
+                        <div class="alarm-box ${alarmClass}">
+                            <strong>${title}</strong><br>${msg}
+                        </div>
+                    `;
+                }
+                results.innerHTML += `
+                    <div class="result-card">
+                        <h3>🎯 检测结果</h3>
+                        <img src="/static/${data.result_image}" alt="结果">
+                        ${alarmHtml}
+                    </div>
+                `;
+            }
+            
+            // 叠加图
+            if (data.overlay_image) {
+                results.innerHTML += `
+                    <div class="result-card">
+                        <h3>🔥 热力叠加图</h3>
+                        <img src="/static/${data.overlay_image}" alt="叠加">
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

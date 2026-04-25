@@ -1,0 +1,10 @@
+# Exclude data folder
+data/
+static
+
+# Exclude weights
+weights/
+fire_detection/weights/
+
+# Exclude outputs
+outputs/
