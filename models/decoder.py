@@ -113,24 +113,56 @@ class EdgeBranch(nn.Module):
         return x
 
 
+class PPM(nn.Module):
+    def __init__(self, in_channels, out_channels, bins=(1, 2, 3, 6)):
+        super(PPM, self).__init__()
+        self.features = nn.ModuleList()
+        for bin_size in bins:
+            self.features.append(nn.Sequential(
+                nn.AdaptiveAvgPool2d(bin_size),
+                nn.Conv2d(in_channels, out_channels // 4, kernel_size=1),
+                nn.BatchNorm2d(out_channels // 4),
+                nn.ReLU(inplace=True)
+            ))
+        self.conv_out = nn.Sequential(
+            nn.Conv2d(in_channels + out_channels // 4 * len(bins), out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        size = x.shape[2:]
+        branches = [x] + [
+            F.interpolate(f(x), size=size, mode='bilinear', align_corners=False)
+            for f in self.features
+        ]
+        return self.conv_out(torch.cat(branches, dim=1))
+
+
 class Decoder(nn.Module):
-    def __init__(self, in_channels_list, out_channels=256):
+    def __init__(self, in_channels_list, out_channels=256, use_ppm=True):
         super(Decoder, self).__init__()
         
-        self.decoder4 = DecoderBlock(in_channels_list[3], in_channels_list[2], out_channels)
+        self.use_ppm = use_ppm
+        if use_ppm:
+            self.ppm = PPM(in_channels_list[3], out_channels)
+        
+        self.decoder4 = DecoderBlock(out_channels, in_channels_list[2], out_channels)
         self.decoder3 = DecoderBlock(out_channels, in_channels_list[1], out_channels // 2)
         self.decoder2 = DecoderBlock(out_channels // 2, in_channels_list[0], out_channels // 4)
         
         self.edge_branch_1_4 = EdgeBranch(out_channels // 4)
         self.edge_branch_1_8 = EdgeBranch(out_channels // 2)
         
-        # 深度监督：每层解码器输出一个显著图预测
-        self.sal_head_1_4 = nn.Conv2d(out_channels // 4, 1, kernel_size=1)   # d2: 1/4分辨率
-        self.sal_head_1_8 = nn.Conv2d(out_channels // 2, 1, kernel_size=1)   # d3: 1/8分辨率
-        self.sal_head_1_16 = nn.Conv2d(out_channels, 1, kernel_size=1)       # d4: 1/16分辨率
+        self.sal_head_1_4 = nn.Conv2d(out_channels // 4, 1, kernel_size=1)
+        self.sal_head_1_8 = nn.Conv2d(out_channels // 2, 1, kernel_size=1)
+        self.sal_head_1_16 = nn.Conv2d(out_channels, 1, kernel_size=1)
     
     def forward(self, features, input_size):
         p2, p3, p4, p5 = features
+        
+        if self.use_ppm:
+            p5 = self.ppm(p5)
         
         d4 = self.decoder4(p5, p4)       # 1/16 分辨率
         d3 = self.decoder3(d4, p3)       # 1/8 分辨率

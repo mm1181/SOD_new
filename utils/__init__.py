@@ -9,27 +9,28 @@ def compute_mae(pred, target):
     return torch.abs(pred - target).mean().item()
 
 
-def compute_fmeasure(pred, target, beta=0.3):
+def compute_fmeasure(pred, target, beta2=0.3):
     pred = pred.cpu().numpy().squeeze()
     target = target.cpu().numpy().squeeze()
-    
-    threshold = 2 * pred.mean()
-    if threshold > 1:
-        threshold = 1
-    
-    binary_pred = (pred >= threshold).astype(np.float32)
     target = (target >= 0.5).astype(np.float32)
-    
-    tp = (binary_pred * target).sum()
-    fp = (binary_pred * (1 - target)).sum()
-    fn = ((1 - binary_pred) * target).sum()
-    
-    precision = tp / (tp + fp + 1e-7)
-    recall = tp / (tp + fn + 1e-7)
-    
-    f_measure = (1 + beta ** 2) * precision * recall / (beta ** 2 * precision + recall + 1e-7)
-    
-    return f_measure
+
+    if target.sum() == 0:
+        return 0.0
+
+    best_f = 0.0
+    for th in range(256):
+        binary_pred = (pred * 255 >= th).astype(np.float32)
+        tp = (binary_pred * target).sum()
+        fp = (binary_pred * (1 - target)).sum()
+        fn = ((1 - binary_pred) * target).sum()
+
+        pre = tp / (tp + fp + 1e-7)
+        rec = tp / (tp + fn + 1e-7)
+        f = (1 + beta2) * pre * rec / (beta2 * pre + rec + 1e-7)
+        if f > best_f:
+            best_f = f
+
+    return best_f
 
 
 def compute_smeasure(pred, target, alpha=0.5):
@@ -178,54 +179,53 @@ def _ssim(pred, target):
 
 def compute_emeasure(pred, target):
     """
-    计算 E-measure (Enhanced-alignment measure)
+    计算 max E-measure (Enhanced-alignment measure)
     参考论文: Enhanced-alignment Measure for Binary Foreground Map Evaluation (IJCAI 2018)
+    扫描 256 个阈值取最大对齐值
     """
     pred = pred.cpu().numpy().squeeze()
     target = target.cpu().numpy().squeeze()
-    
-    # 确保是2D数组
+
     if pred.ndim != 2:
         pred = pred.reshape(pred.shape[-2], pred.shape[-1])
     if target.ndim != 2:
         target = target.reshape(target.shape[-2], target.shape[-1])
-    
-    # 二值化
-    threshold = 2 * pred.mean()
-    if threshold > 1:
-        threshold = 1
-    binary_pred = (pred >= threshold).astype(np.float32)
+
     target = (target >= 0.5).astype(np.float32)
-    
-    # 计算增强对齐矩阵
-    h, w = target.shape
-    n = h * w
-    
-    # 全局均值
-    pred_mean = binary_pred.mean()
     gt_mean = target.mean()
-    
-    # 处理特殊情况
+
     if gt_mean == 0:
-        # 全背景
-        enhanced_matrix = 1 - binary_pred
-        return enhanced_matrix.mean()
+        best_e = 0.0
+        for th in range(256):
+            binary_pred = (pred * 255 >= th).astype(np.float32)
+            e = (1 - binary_pred).mean()
+            if e > best_e:
+                best_e = e
+        return best_e
     elif gt_mean == 1:
-        # 全前景
-        enhanced_matrix = binary_pred
-        return enhanced_matrix.mean()
-    
-    # 对齐矩阵
-    align_pred = binary_pred - pred_mean
-    align_gt = target - gt_mean
-    
-    # 增强对齐矩阵
-    align_matrix = 2 * align_pred * align_gt / (align_pred ** 2 + align_gt ** 2 + 1e-7)
-    
-    # 增强矩阵
-    enhanced_matrix = (align_matrix + 1) ** 2 / 4
-    
-    return enhanced_matrix.mean()
+        best_e = 0.0
+        for th in range(256):
+            binary_pred = (pred * 255 >= th).astype(np.float32)
+            e = binary_pred.mean()
+            if e > best_e:
+                best_e = e
+        return best_e
+
+    best_e = 0.0
+    for th in range(256):
+        binary_pred = (pred * 255 >= th).astype(np.float32)
+        pred_mean = binary_pred.mean()
+
+        align_pred = binary_pred - pred_mean
+        align_gt = target - gt_mean
+
+        align_matrix = 2 * align_pred * align_gt / (align_pred ** 2 + align_gt ** 2 + 1e-7)
+        enhanced_matrix = (align_matrix + 1) ** 2 / 4
+        e = enhanced_matrix.mean()
+        if e > best_e:
+            best_e = e
+
+    return best_e
 
 
 class AverageMeter:
@@ -254,3 +254,22 @@ def load_checkpoint(model, optimizer, filename):
     model.load_state_dict(checkpoint['state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer'])
     return checkpoint['epoch'], checkpoint['best_mae']
+
+
+def align_to_multiple(h, w, multiple=32):
+    import math
+    return math.ceil(h / multiple) * multiple, math.ceil(w / multiple) * multiple
+
+
+def multi_scale_inference(model, image, scales=(0.75, 1.0, 1.25)):
+    orig_h, orig_w = image.shape[2:]
+    total_pred = None
+    for scale in scales:
+        h, w = align_to_multiple(int(orig_h * scale), int(orig_w * scale))
+        scaled = torch.nn.functional.interpolate(image, size=(h, w), mode='bilinear', align_corners=False)
+        with torch.no_grad():
+            sal_list, _, _ = model(scaled)
+            pred = torch.sigmoid(sal_list[0])
+        pred = torch.nn.functional.interpolate(pred, size=(orig_h, orig_w), mode='bilinear', align_corners=False)
+        total_pred = pred if total_pred is None else total_pred + pred
+    return total_pred / len(scales)

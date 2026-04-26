@@ -8,14 +8,25 @@ import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 
 
+def split_dataset(image_dir, mask_dir, val_ratio=0.1, seed=42):
+    rng = random.Random(seed)
+    image_files = sorted([f for f in os.listdir(image_dir) if f.endswith(('.jpg', '.png', '.jpeg'))])
+    rng.shuffle(image_files)
+    split_idx = int(len(image_files) * (1 - val_ratio))
+    return image_files[:split_idx], image_files[split_idx:]
+
+
 class DUTSDataset(Dataset):
-    def __init__(self, image_dir, mask_dir, size_list=[256, 288, 320, 352, 384], is_train=True):
+    def __init__(self, image_dir, mask_dir, size_list=[256, 288, 320, 352, 384], is_train=True, file_list=None):
         self.image_dir = image_dir
         self.mask_dir = mask_dir
         self.is_train = is_train
         self.size_list = size_list
         
-        self.image_files = sorted([f for f in os.listdir(image_dir) if f.endswith(('.jpg', '.png', '.jpeg'))])
+        if file_list is not None:
+            self.image_files = list(file_list)
+        else:
+            self.image_files = sorted([f for f in os.listdir(image_dir) if f.endswith(('.jpg', '.png', '.jpeg'))])
         
         self.to_tensor = transforms.ToTensor()
         self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -262,8 +273,8 @@ class CutMix:
         return bbx1, bby1, bbx2, bby2
 
 
-def get_dataloader(image_dir, mask_dir, batch_size=16, num_workers=4, is_train=True, size_list=[256, 288, 320, 352, 384]):
-    dataset = DUTSDataset(image_dir, mask_dir, size_list=size_list, is_train=is_train)
+def get_dataloader(image_dir, mask_dir, batch_size=16, num_workers=4, is_train=True, size_list=[256, 288, 320, 352, 384], file_list=None):
+    dataset = DUTSDataset(image_dir, mask_dir, size_list=size_list, is_train=is_train, file_list=file_list)
     
     dataloader = DataLoader(
         dataset,

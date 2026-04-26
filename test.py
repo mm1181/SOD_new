@@ -153,9 +153,9 @@ def test(model, image_dir, mask_dir, device, img_size, dataset_name, use_tta=Fal
                 saliency = torch.sigmoid(saliency_list[0]).squeeze().cpu().numpy()
                 
                 # 调整到原始尺寸
-                saliency_pil = Image.fromarray((saliency * 255).astype(np.uint8))
-                saliency_pil = saliency_pil.resize((original_size[1], original_size[0]), Image.BILINEAR)
-                saliency = np.array(saliency_pil) / 255.0
+                saliency_tensor = torch.from_numpy(saliency).unsqueeze(0).unsqueeze(0)
+                saliency_tensor = F.interpolate(saliency_tensor, size=original_size, mode='bilinear', align_corners=False)
+                saliency = saliency_tensor.squeeze().numpy()
             
             mask_name = get_mask_name(image_name, dataset_name)
             mask_path = os.path.join(mask_dir, mask_name)
