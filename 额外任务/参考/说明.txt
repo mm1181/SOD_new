@@ -1,3 +1,0 @@
-ai_manager.py是负责调用算法的仅供参考。在ai_service.py里实现算法。目前实现好了一个算法，函数名_helmet_detect，这个函数的逻辑就是加载模型，进行逻辑判断。就参考这个函数里的代码写就行。
-
-模型的训练用yolo26，用这个项目地址来训练https://github.com/liekongxingyu/ultralytics_fork.git。数据集可以在roboflow上面找

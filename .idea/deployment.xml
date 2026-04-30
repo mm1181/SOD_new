@@ -1,22 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="root@connect.westc.seetacloud.com:55328 password" autoUploadExternalChanges="true">
+  <component name="PublishConfigData" autoUpload="Always" serverName="root@connect.westc.seetacloud.com:39372 password" remoteFilesAllowedToDisappearOnAutoupload="false" autoUploadExternalChanges="true">
     <serverData>
-      <paths name="root@connect.westc.seetacloud.com:29264 password">
+      <paths name="root@connect.westc.seetacloud.com:19679 password">
         <serverdata>
           <mappings>
-            <mapping deploy="/autodl-tmp/my_SOD_3" local="$PROJECT_DIR$" web="/" />
+            <mapping local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>
-      <paths name="root@connect.westc.seetacloud.com:55328 password">
+      <paths name="root@connect.westc.seetacloud.com:39372 password">
         <serverdata>
           <mappings>
             <mapping deploy="/root/autodl-tmp/my_SOD_3" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>
-      <paths name="root@connect.westd.seetacloud.com:33430 password">
+      <paths name="root@connect.westc.seetacloud.com:55328 password">
         <serverdata>
           <mappings>
             <mapping deploy="/root/autodl-tmp/my_SOD_3" local="$PROJECT_DIR$" />
